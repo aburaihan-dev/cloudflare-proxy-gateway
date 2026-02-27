@@ -6,6 +6,8 @@ import { metrics } from './metrics';
 import { CacheManager } from './cache';
 import { deduplicator } from './deduplication';
 import { circuitBreaker } from './circuitbreaker';
+// Register all auth adapters (built-in + any custom adapters added to this file)
+import './auth/adapters/index';
 
 const app = new Hono<{ Bindings: Env }>();
 

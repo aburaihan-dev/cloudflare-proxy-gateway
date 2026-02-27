@@ -2,6 +2,7 @@
 import { SizeLimits } from './validation';
 import { CacheConfig } from './types/cache';
 import { CircuitBreakerConfig } from './types/circuitbreaker';
+import { AuthFeatureConfig } from './types/auth';
 
 export interface DeduplicationConfig {
   windowMs?: number; // Deduplication window in milliseconds (default: 5000)
@@ -29,6 +30,7 @@ export interface FeaturesConfig {
   metrics?: {
     enabled?: boolean; // default: false
   };
+  auth?: AuthFeatureConfig;
 }
 
 export interface Route {
@@ -39,6 +41,7 @@ export interface Route {
   circuitBreaker?: string; // Profile name from features.circuitBreaker.profiles
   deduplication?: string; // Profile name from features.deduplication.profiles
   sizeLimits?: string; // Profile name from features.sizeLimits.profiles
+  auth?: string;       // Profile name from features.auth.profiles
 }
 
 export interface ProxyConfig {
@@ -64,7 +67,8 @@ export interface CachedConfig {
 
 export interface Env {
   PROXY_CONFIG: KVNamespace;
-  PROXY_CACHE?: KVNamespace; // Optional: KV namespace for response caching
+  PROXY_CACHE?: KVNamespace;      // Optional: KV namespace for response caching
+  PROXY_AUTH_CACHE?: KVNamespace; // Optional: dedicated KV namespace for auth decision caching
   REQUEST_TIMEOUT?: string;
   CACHE_TTL?: string;
   ADMIN_KEY?: string;

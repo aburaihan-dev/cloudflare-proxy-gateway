@@ -10,6 +10,8 @@ import { deduplicator } from './deduplication';
 import { circuitBreaker } from './circuitbreaker';
 import { CacheConfig } from './types/cache';
 import { CircuitBreakerConfig } from './types/circuitbreaker';
+import { AuthFeatureConfig } from './types/auth';
+import { runAuth } from './auth/index';
 
 export interface MatchedRoute {
   route: Route;
@@ -38,6 +40,11 @@ function resolveSizeLimits(config: ProxyConfig, route: Route): SizeLimits | null
     return config.features.sizeLimits.profiles[route.sizeLimits] ?? null;
   }
   return config.features.sizeLimits.default ?? null;
+}
+
+function resolveAuth(config: ProxyConfig, route: Route): AuthFeatureConfig | null {
+  if (!config.features?.auth?.enabled || !route.auth) return null;
+  return config.features.auth.profiles[route.auth] ? config.features.auth : null;
 }
 
 function isMetricsEnabled(config: ProxyConfig): boolean {
@@ -144,7 +151,7 @@ export function findMatchingRoute(path: string, routes: Route[]): MatchedRoute |
 
 export async function proxyRequest(c: Context<{ Bindings: Env }>): Promise<Response> {
   const startTime = Date.now();
-  const request = c.req.raw;
+  let request = c.req.raw;
   const url = new URL(request.url);
   
   try {
@@ -331,7 +338,42 @@ export async function proxyRequest(c: Context<{ Bindings: Env }>): Promise<Respo
       }));
       return new Response('Forbidden: Origin not allowed', { status: 403 });
     }
-    
+
+    // Security Check: Auth Adapter
+    const authFeatureConfig = resolveAuth(config, route);
+    if (authFeatureConfig && route.auth) {
+      const profileConfig = authFeatureConfig.profiles[route.auth];
+      const authResult = await runAuth(request, profileConfig, authFeatureConfig, c.env, c.executionCtx);
+
+      if (!authResult.success) {
+        const responseTime = Date.now() - startTime;
+        log(createLogEntry(request, authResult.response?.status ?? 401, responseTime, {
+          error: 'Auth failed',
+          adapter: profileConfig.adapter,
+          routePrefix: route.prefix,
+          auditType: 'AUTH_FAILED',
+          url,
+        }));
+        if (isMetricsEnabled(config)) {
+          metrics.recordRequest(authResult.response?.status ?? 401, responseTime, true);
+        }
+        return authResult.response ?? new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Inject upstream headers returned by the adapter
+      if (authResult.upstreamHeaders) {
+        const mutableHeaders = new Headers(request.headers);
+        for (const [key, value] of Object.entries(authResult.upstreamHeaders)) {
+          mutableHeaders.set(key, value);
+        }
+        // Reconstruct the request with the enriched headers
+        request = new Request(request, { headers: mutableHeaders });
+      }
+    }
+
     // Initialize cache manager
     const cacheManager = new CacheManager(c.env.PROXY_CACHE);
     

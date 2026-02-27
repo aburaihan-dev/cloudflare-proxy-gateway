@@ -13,11 +13,14 @@ A production-ready edge proxy built on **Cloudflare Workers** and **Hono**. Rout
 - [Tech Stack](#tech-stack)
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
+- [Auth Adapters](#auth-adapters)
 - [Admin Endpoints](#admin-endpoints)
 - [Environment Variables](#environment-variables)
 - [Response Codes](#response-codes)
 - [Troubleshooting](#troubleshooting)
 - [Project Structure](#project-structure)
+
+> 📖 **Auth integration guide for developers:** [docs/guides/AUTH_ADAPTER_GUIDE.md](docs/guides/AUTH_ADAPTER_GUIDE.md)
 
 ---
 
@@ -44,6 +47,7 @@ A production-ready edge proxy built on **Cloudflare Workers** and **Hono**. Rout
 | **Observability** | Time-bucketed analytics | 1 m / 5 m / 1 h aggregations |
 | **Advanced** | Geo-routing | Country / continent-based backend selection |
 | **Advanced** | WebSocket detection | Identifies and flags WebSocket upgrade requests |
+| **Auth** | Auth Adapter system | Pluggable adapter interface — integrate any auth service without changing core code |
 | **Config** | Zero-downtime updates | KV-backed config with 12 h in-memory cache + manual flush |
 
 ---
@@ -290,6 +294,144 @@ Use `rateLimitMultiplier` on a route to tighten (`0.5`) or relax (`5.0`) the lim
 ```
 
 </details>
+
+<details>
+<summary><strong>Origin & IP Control</strong></summary>
+
+```json
+{
+  "allowedOrigins": ["https://app.example.com", "http://localhost:3000"],
+  "blockedOrigins": ["spam.example.com"]
+}
+```
+
+</details>
+
+---
+
+## Auth Adapters
+
+The proxy ships an **adapter interface + registry** — you write the auth logic, the proxy calls it. No core code changes needed.
+
+### How it works
+
+1. **Define your adapter** implementing the `AuthAdapter` interface
+2. **Register it** in `src/auth/adapters/index.ts` (the only file you touch)
+3. **Reference it** by name in your route config
+
+### Built-in adapters
+
+| Adapter | Description |
+|---|---|
+| `jwt` | Validates Bearer tokens — JWKS (RS256/ES256) or shared secret (HS256). Configurable token extraction: `header`, `cookie`, `query`, `custom-header`. |
+| `forward-auth` | Makes a subrequest to your auth service. 2xx = pass, any other status is forwarded to the client as-is. |
+
+### Writing a custom adapter
+
+```typescript
+// src/auth/adapters/my-adapter.ts
+import type { AuthAdapter, AuthResult } from '../../types/auth';
+
+export const myAdapter: AuthAdapter = {
+  name: 'my-adapter',
+
+  // Return the cache key for this request, or null to skip caching
+  cacheKey(request, _config) {
+    return request.headers.get('Authorization');
+  },
+
+  async verify(request, config, env, ctx): Promise<AuthResult> {
+    const token = request.headers.get('Authorization')?.slice(7);
+    if (!token) {
+      return {
+        success: false,
+        response: new Response(JSON.stringify({ error: 'Missing token' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      };
+    }
+
+    // Your verification logic here...
+
+    return {
+      success: true,
+      upstreamHeaders: { 'X-User-Id': 'user-123' },
+    };
+  },
+};
+```
+
+Register in `src/auth/adapters/index.ts`:
+
+```typescript
+import { myAdapter } from './my-adapter';
+registerAdapter(myAdapter);
+```
+
+### Example: Supabase Auth
+
+A complete example lives at `src/auth/adapters/supabase.ts` — local HS256 JWT validation with Supabase-specific claim mapping (`X-User-Id`, `X-User-Email`, `X-User-Role`) and an optional API verification fallback.
+
+Uncomment in `src/auth/adapters/index.ts` to enable:
+
+```typescript
+import { supabaseAdapter } from './supabase';
+registerAdapter(supabaseAdapter);
+```
+
+Config:
+
+```json
+{
+  "routes": [{ "prefix": "/api/private", "target": "https://backend.com", "auth": "supabase-default" }],
+  "features": {
+    "auth": {
+      "enabled": true,
+      "cache": { "enabled": true, "ttl": 300 },
+      "profiles": {
+        "supabase-default": {
+          "adapter": "supabase",
+          "supabaseUrl": "https://xxxx.supabase.co",
+          "supabaseJwtSecret": "your-jwt-secret"
+        }
+      }
+    }
+  }
+}
+```
+
+### Auth config reference
+
+```jsonc
+"features": {
+  "auth": {
+    "enabled": true,
+    "cache": {
+      "enabled": true,
+      "kvBinding": "PROXY_AUTH_CACHE",  // or "PROXY_CACHE" to reuse existing namespace
+      "ttl": 300                         // cache TTL in seconds (successful decisions only)
+    },
+    "profiles": {
+      "my-profile": {
+        "adapter": "jwt",               // registered adapter name
+        "jwksUrl": "https://...",        // adapter-specific config passed through as-is
+        "audience": "my-api",
+        "issuer": "https://..."
+      }
+    }
+  }
+}
+```
+
+Reference a profile on any route: `"auth": "my-profile"`.
+
+### Auth cache KV (optional)
+
+```bash
+pnpm exec wrangler kv namespace create "PROXY_AUTH_CACHE"
+# Paste the returned ID into the commented block in wrangler.toml
+```
 
 ---
 
