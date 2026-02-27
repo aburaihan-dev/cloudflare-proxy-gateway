@@ -1,0 +1,11 @@
+node_modules
+dist
+.wrangler
+.dev.vars
+*.log
+.DS_Store
+wrangler.toml
+config.json
+CHANGES_SUMMARY.md
+SESSION_REPORT_2026-02-01.mdCHANGES_SUMMARY.md
+SELECTIVE_HMAC_SUMMARY.md

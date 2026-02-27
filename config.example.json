@@ -1,0 +1,102 @@
+{
+  "routes": [
+    { 
+      "prefix": "/api/admin", 
+      "target": "https://admin.example.com",
+      "rateLimitMultiplier": 0.5,
+      "sizeLimits": "strict"
+    },
+    { 
+      "prefix": "/api/data", 
+      "target": "https://api.example.com/data",
+      "rateLimitMultiplier": 1.0,
+      "cache": "default",
+      "deduplication": "default",
+      "circuitBreaker": "default"
+    },
+    { 
+      "prefix": "/api/public", 
+      "target": "https://api.example.com/public",
+      "rateLimitMultiplier": 2.0,
+      "cache": "default"
+    },
+    {
+      "prefix": "/static",
+      "target": "https://cdn.example.com/static",
+      "rateLimitMultiplier": 5.0,
+      "cache": "static"
+    }
+  ],
+  "allowedOrigins": [
+    "https://your-website.com",
+    "*.example.com",
+    "http://localhost:3000"
+  ],
+  "blockedOrigins": [
+    "blocked-domain.example.com"
+  ],
+  "rateLimit": {
+    "enabled": true,
+    "requestsPerWindow": 300,
+    "windowSeconds": 300
+  },
+  "features": {
+    "cache": {
+      "enabled": false,
+      "profiles": {
+        "default": {
+          "ttl": 300,
+          "varyBy": ["Accept-Language"],
+          "bypassHeader": "X-No-Cache",
+          "staleWhileRevalidate": 60,
+          "respectCacheControl": true
+        },
+        "static": {
+          "ttl": 3600,
+          "respectCacheControl": false
+        }
+      }
+    },
+    "circuitBreaker": {
+      "enabled": false,
+      "profiles": {
+        "default": {
+          "failureThreshold": 5,
+          "timeout": 60000,
+          "halfOpenAttempts": 3,
+          "successThreshold": 2
+        }
+      }
+    },
+    "deduplication": {
+      "enabled": false,
+      "profiles": {
+        "default": {
+          "windowMs": 5000
+        }
+      }
+    },
+    "sizeLimits": {
+      "enabled": false,
+      "default": {
+        "maxBodySize": 10485760,
+        "maxUrlLength": 8192,
+        "maxHeaderSize": 16384,
+        "maxHeaderCount": 100
+      },
+      "profiles": {
+        "strict": {
+          "maxBodySize": 5242880,
+          "maxUrlLength": 4096,
+          "maxHeaderSize": 8192,
+          "maxHeaderCount": 50
+        }
+      }
+    },
+    "metrics": {
+      "enabled": false
+    }
+  },
+  "turnstileSecretKey": "",
+  "version": "2.0"
+}

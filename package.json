@@ -1,0 +1,28 @@
+{
+  "name": "proxy-load-balancer",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker proxy load balancer with Hono",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "keywords": [
+    "cloudflare",
+    "worker",
+    "proxy",
+    "load-balancer",
+    "hono"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "hono": "^4.11.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260131.0",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.61.1"
+  }
+}
